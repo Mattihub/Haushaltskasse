@@ -546,13 +546,23 @@ const DataSync = (function () {
 // PWA – Service Worker Registrierung
 // ------------------------------------------------------------
 function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js').catch((err) => {
-                console.error('Service Worker Registrierung fehlgeschlagen:', err);
-            });
+    if (!('serviceWorker' in navigator)) return;
+
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((err) => {
+            console.error('Service Worker Registrierung fehlgeschlagen:', err);
         });
-    }
+    });
+
+    // Sobald ein neuer Service Worker aktiv wird (neues Deploy erkannt),
+    // laden wir die Seite einmal automatisch neu, damit man nie mit
+    // veraltetem Code hängen bleibt.
+    let hasReloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hasReloaded) return;
+        hasReloaded = true;
+        window.location.reload();
+    });
 }
 
 // ------------------------------------------------------------

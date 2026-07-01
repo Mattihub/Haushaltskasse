@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#161310">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Kasse">
+    <title>Haushaltskasse</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink: '#161310',
+                        panel: '#211b17',
+                        panel2: '#2a221d',
+                        hairline: '#3a2f28',
+                        amber: {
+                            DEFAULT: '#d97706',
+                            bright: '#f5a524',
+                            soft: '#fbbf5c',
+                            deep: '#92400e'
+                        },
+                        bone: '#f2ead9',
+                        muted: '#9c8c7a'
+                    },
+                    fontFamily: {
+                        display: ['"Space Grotesk"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        html, body { background: #161310; overscroll-behavior-y: contain; }
+        * { -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Space Grotesk', sans-serif; }
+        .num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #3a2f28; border-radius: 4px; }
+
+        .press-scale { transition: transform 0.08s ease; }
+        .press-scale:active { transform: scale(0.97); }
+
+        .row-enter { animation: rowIn 0.22s ease both; }
+        @keyframes rowIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .chevron { transition: transform 0.2s ease; }
+        .expanded .chevron { transform: rotate(180deg); }
+
+        .sheet { transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1); }
+
+        .grain {
+            background-image: radial-gradient(circle at 1px 1px, rgba(242,234,217,0.035) 1px, transparent 0);
+            background-size: 18px 18px;
+        }
+    </style>
+</head>
+<body class="bg-ink text-bone min-h-screen grain">
+
+<div class="max-w-md mx-auto min-h-screen flex flex-col pb-10">
+
+    <!-- Header -->
+    <header class="flex items-center justify-between px-5 pt-6 pb-2">
+        <div>
+            <p class="text-[11px] uppercase tracking-[0.2em] text-muted">Werkstatt-Kasse</p>
+            <p class="text-sm text-muted/70 num" id="month-label">—</p>
+        </div>
+        <button id="settings-btn" aria-label="Einstellungen" class="press-scale w-11 h-11 rounded-full bg-panel border border-hairline flex items-center justify-center text-amber-soft">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+        </button>
+    </header>
+
+    <!-- Budget Hero -->
+    <section class="px-5 pt-4 pb-6">
+        <p class="text-[11px] uppercase tracking-[0.2em] text-muted mb-1">Verbleibendes Budget</p>
+        <div class="flex items-baseline gap-1">
+            <span class="num text-6xl font-bold leading-none" id="remaining-budget">200</span>
+            <span class="text-2xl font-semibold text-muted">€</span>
+        </div>
+
+        <div class="mt-5 flex items-center gap-3 bg-panel border border-hairline rounded-2xl px-4 py-3">
+            <div class="w-9 h-9 rounded-full bg-amber/15 flex items-center justify-center shrink-0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f5a524" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+            </div>
+            <div>
+                <p class="text-[11px] uppercase tracking-[0.15em] text-muted">Tagesbudget · <span id="days-left">—</span> Tage übrig</p>
+                <p class="num text-xl font-semibold text-amber-soft" id="daily-budget">— €</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- New Receipt Card -->
+    <section class="px-5">
+        <div class="bg-panel border border-hairline rounded-3xl p-5">
+            <h2 class="text-base font-semibold mb-4">Neuer Beleg</h2>
+
+            <div id="product-rows" class="flex flex-col gap-2 mb-3"></div>
+
+            <button id="add-product-btn" class="press-scale w-full py-3 rounded-xl border border-dashed border-hairline text-muted hover:text-amber-soft hover:border-amber/40 text-sm font-medium flex items-center justify-center gap-2 mb-4">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Produkt hinzufügen
+            </button>
+
+            <div class="flex items-center justify-between px-1 mb-4">
+                <span class="text-sm text-muted">Summe</span>
+                <span class="num text-2xl font-bold text-amber-soft" id="running-total">0,00 €</span>
+            </div>
+
+            <button id="submit-receipt-btn" class="press-scale w-full py-4 rounded-2xl bg-amber text-ink font-bold text-lg disabled:opacity-40 disabled:pointer-events-none">
+                Beleg abrechnen
+            </button>
+        </div>
+    </section>
+
+    <!-- History -->
+    <section class="px-5 mt-8 flex-1">
+        <h2 class="text-[11px] uppercase tracking-[0.2em] text-muted mb-3 px-1">Verlauf</h2>
+        <div id="history-list" class="flex flex-col gap-2"></div>
+        <p id="history-empty" class="text-sm text-muted/60 text-center py-8 hidden">Noch keine Belege eingetragen.</p>
+    </section>
+
+</div>
+
+<!-- Settings Bottom Sheet -->
+<div id="settings-overlay" class="fixed inset-0 bg-black/60 opacity-0 pointer-events-none transition-opacity duration-200 z-40"></div>
+<div id="settings-sheet" class="sheet fixed left-0 right-0 bottom-0 translate-y-full z-50 max-w-md mx-auto">
+    <div class="bg-panel2 border-t border-hairline rounded-t-3xl p-6 pb-8">
+        <div class="w-10 h-1 bg-hairline rounded-full mx-auto mb-5"></div>
+        <h2 class="text-lg font-semibold mb-1">Einstellungen</h2>
+        <p class="text-sm text-muted mb-5">Monatliches Startbudget</p>
+        <div class="flex items-center gap-3 mb-6">
+            <input id="budget-input" type="number" inputmode="decimal" step="0.01" class="num flex-1 bg-panel border border-hairline rounded-xl px-4 py-3 text-xl font-semibold text-bone outline-none focus:border-amber/60" placeholder="200">
+            <span class="text-xl text-muted">€</span>
+        </div>
+        <button id="save-budget-btn" class="press-scale w-full py-4 rounded-2xl bg-amber text-ink font-bold text-lg mb-3">
+            Speichern
+        </button>
+        <button id="close-settings-btn" class="press-scale w-full py-3 rounded-2xl text-muted font-medium">
+            Abbrechen
+        </button>
+    </div>
+</div>
+
+<!-- Product Row Template -->
+<template id="product-row-template">
+    <div class="row-enter flex items-center gap-2 product-row">
+        <input type="text" placeholder="Produkt" class="product-name flex-1 bg-panel2 border border-hairline rounded-xl px-3 py-2.5 text-sm text-bone outline-none focus:border-amber/60">
+        <input type="number" inputmode="decimal" step="0.01" placeholder="0,00" class="product-price num w-24 bg-panel2 border border-hairline rounded-xl px-3 py-2.5 text-sm text-bone outline-none focus:border-amber/60 text-right">
+        <button class="remove-row-btn shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:text-red-400" aria-label="Zeile entfernen">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+</template>
+
+<!-- History Item Template -->
+<template id="history-item-template">
+    <div class="history-item bg-panel border border-hairline rounded-2xl overflow-hidden">
+        <button class="history-toggle w-full flex items-center justify-between px-4 py-3.5 text-left">
+            <div>
+                <p class="history-date text-sm font-medium">—</p>
+                <p class="history-time text-xs text-muted">—</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="history-total num text-lg font-bold text-amber-soft">—</span>
+                <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9c8c7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+        </button>
+        <div class="history-items hidden border-t border-hairline px-4 py-3 flex flex-col gap-1.5"></div>
+    </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>

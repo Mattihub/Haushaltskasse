@@ -56,11 +56,54 @@ const Utils = (function () {
 })();
 
 // ------------------------------------------------------------
+// UserIdentity – Namenskürzel, lokal auf dem Gerät gespeichert
+// (kein Login, jede Person wählt einmalig ihren Namen)
+// ------------------------------------------------------------
+const UserIdentity = (function () {
+    const STORAGE_KEY = 'kasse_username';
+
+    function get() {
+        return localStorage.getItem(STORAGE_KEY) || '';
+    }
+
+    function set(name) {
+        const trimmed = name.trim();
+        if (trimmed) localStorage.setItem(STORAGE_KEY, trimmed);
+    }
+
+    function ensureOnboarding() {
+        if (!get()) {
+            DOM.onboardingOverlay.classList.remove('hidden');
+        }
+    }
+
+    function initOnboarding() {
+        function confirmName() {
+            const name = DOM.onboardingNameInput.value.trim();
+            if (!name) {
+                DOM.onboardingNameInput.focus();
+                return;
+            }
+            set(name);
+            DOM.onboardingOverlay.classList.add('hidden');
+        }
+
+        DOM.onboardingSaveBtn.addEventListener('click', confirmName);
+        DOM.onboardingNameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') confirmName();
+        });
+    }
+
+    return { get, set, ensureOnboarding, initOnboarding };
+})();
+
+// ------------------------------------------------------------
 // State
 // ------------------------------------------------------------
 const State = {
     monthlyBudget: 200,
-    receipts: [] // [{ id, total, created_at, receipt_items: [{id, name, price}] }]
+    receipts: [], // [{ id, total, created_at, added_by, receipt_items: [{id, name, price}] }]
+    editingReceiptId: null
 };
 
 // ------------------------------------------------------------
@@ -86,6 +129,14 @@ const DOM = {
     closeSettingsBtn: document.getElementById('close-settings-btn'),
     saveBudgetBtn: document.getElementById('save-budget-btn'),
     budgetInput: document.getElementById('budget-input'),
+    settingsNameInput: document.getElementById('settings-name-input'),
+
+    onboardingOverlay: document.getElementById('onboarding-overlay'),
+    onboardingNameInput: document.getElementById('onboarding-name-input'),
+    onboardingSaveBtn: document.getElementById('onboarding-save-btn'),
+
+    editingBanner: document.getElementById('editing-banner'),
+    cancelEditBtn: document.getElementById('cancel-edit-btn'),
 
     productRowTemplate: document.getElementById('product-row-template'),
     historyItemTemplate: document.getElementById('history-item-template')
@@ -138,9 +189,46 @@ const ProductForm = (function () {
             recalcTotal();
         });
 
+        // Enter im Namensfeld -> springt ins Preisfeld derselben Zeile
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                priceInput.focus();
+            }
+        });
+
+        // Enter im Preisfeld -> springt zur nächsten Zeile, oder legt
+        // eine neue an, wenn es die letzte Zeile ist. So kommt man an
+        // der Kasse ohne den "Produkt hinzufügen"-Button durch.
+        priceInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const nextRow = row.nextElementSibling;
+                if (nextRow && nextRow.classList.contains('product-row')) {
+                    nextRow.querySelector('.product-name').focus();
+                } else {
+                    addRow(true);
+                }
+            }
+        });
+
         DOM.productRows.appendChild(row);
         if (focus) nameInput.focus();
         return row;
+    }
+
+    function loadItems(items) {
+        DOM.productRows.innerHTML = '';
+        if (!items || items.length === 0) {
+            addRow(false);
+        } else {
+            items.forEach((item) => {
+                const row = addRow(false);
+                row.querySelector('.product-name').value = item.name;
+                row.querySelector('.product-price').value = item.price;
+            });
+        }
+        recalcTotal();
     }
 
     function getRows() {
@@ -175,7 +263,7 @@ const ProductForm = (function () {
         reset();
     }
 
-    return { init, reset, getValidItems, recalcTotal };
+    return { init, reset, loadItems, getValidItems, recalcTotal };
 })();
 
 // ------------------------------------------------------------
@@ -187,27 +275,54 @@ const ReceiptSubmit = (function () {
         if (items.length === 0) return;
 
         const total = items.reduce((sum, item) => sum + item.price, 0);
+        const editingId = State.editingReceiptId;
 
         DOM.submitReceiptBtn.disabled = true;
         DOM.submitReceiptBtn.textContent = 'Speichern…';
 
         try {
-            const { data: receipt, error: receiptError } = await sb
-                .from('receipts')
-                .insert({ total })
-                .select()
-                .single();
+            if (editingId) {
+                // Bestehenden Beleg aktualisieren: Summe updaten, alte
+                // Produktzeilen ersetzen.
+                const { error: updateError } = await sb
+                    .from('receipts')
+                    .update({ total })
+                    .eq('id', editingId);
+                if (updateError) throw updateError;
 
-            if (receiptError) throw receiptError;
+                const { error: deleteItemsError } = await sb
+                    .from('receipt_items')
+                    .delete()
+                    .eq('receipt_id', editingId);
+                if (deleteItemsError) throw deleteItemsError;
 
-            const itemRows = items.map((item) => ({
-                receipt_id: receipt.id,
-                name: item.name,
-                price: item.price
-            }));
+                const itemRows = items.map((item) => ({
+                    receipt_id: editingId,
+                    name: item.name,
+                    price: item.price
+                }));
+                const { error: itemsError } = await sb.from('receipt_items').insert(itemRows);
+                if (itemsError) throw itemsError;
 
-            const { error: itemsError } = await sb.from('receipt_items').insert(itemRows);
-            if (itemsError) throw itemsError;
+                ReceiptActions.exitEditMode();
+            } else {
+                const { data: receipt, error: receiptError } = await sb
+                    .from('receipts')
+                    .insert({ total, added_by: UserIdentity.get() || null })
+                    .select()
+                    .single();
+
+                if (receiptError) throw receiptError;
+
+                const itemRows = items.map((item) => ({
+                    receipt_id: receipt.id,
+                    name: item.name,
+                    price: item.price
+                }));
+
+                const { error: itemsError } = await sb.from('receipt_items').insert(itemRows);
+                if (itemsError) throw itemsError;
+            }
 
             ProductForm.reset();
             await DataSync.reload();
@@ -215,7 +330,7 @@ const ReceiptSubmit = (function () {
             console.error('Fehler beim Speichern des Belegs:', err);
             alert('Beleg konnte nicht gespeichert werden. Bitte Internetverbindung prüfen und erneut versuchen.');
         } finally {
-            DOM.submitReceiptBtn.textContent = 'Beleg abrechnen';
+            DOM.submitReceiptBtn.textContent = State.editingReceiptId ? 'Änderungen speichern' : 'Beleg abrechnen';
             ProductForm.recalcTotal();
         }
     }
@@ -225,6 +340,56 @@ const ReceiptSubmit = (function () {
     }
 
     return { init };
+})();
+
+// ------------------------------------------------------------
+// ReceiptActions – Bearbeiten & Löschen bestehender Belege
+// ------------------------------------------------------------
+const ReceiptActions = (function () {
+    function enterEditMode(receipt) {
+        State.editingReceiptId = receipt.id;
+        const items = (receipt.receipt_items || []).map((i) => ({ name: i.name, price: i.price }));
+        ProductForm.loadItems(items);
+        DOM.editingBanner.classList.remove('hidden');
+        DOM.editingBanner.classList.add('flex');
+        DOM.submitReceiptBtn.textContent = 'Änderungen speichern';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function exitEditMode() {
+        State.editingReceiptId = null;
+        DOM.editingBanner.classList.add('hidden');
+        DOM.editingBanner.classList.remove('flex');
+        DOM.submitReceiptBtn.textContent = 'Beleg abrechnen';
+    }
+
+    async function deleteReceipt(id) {
+        const confirmed = confirm('Diesen Beleg wirklich löschen? Das kann nicht rückgängig gemacht werden.');
+        if (!confirmed) return;
+
+        try {
+            const { error } = await sb.from('receipts').delete().eq('id', id);
+            if (error) throw error;
+
+            if (State.editingReceiptId === id) {
+                exitEditMode();
+                ProductForm.reset();
+            }
+            await DataSync.reload();
+        } catch (err) {
+            console.error('Fehler beim Löschen:', err);
+            alert('Beleg konnte nicht gelöscht werden.');
+        }
+    }
+
+    function init() {
+        DOM.cancelEditBtn.addEventListener('click', () => {
+            exitEditMode();
+            ProductForm.reset();
+        });
+    }
+
+    return { init, enterEditMode, exitEditMode, deleteReceipt };
 })();
 
 // ------------------------------------------------------------
@@ -246,15 +411,20 @@ const History = (function () {
             const toggle = item.querySelector('.history-toggle');
             const dateEl = item.querySelector('.history-date');
             const timeEl = item.querySelector('.history-time');
+            const authorEl = item.querySelector('.history-author');
             const totalEl = item.querySelector('.history-total');
             const itemsEl = item.querySelector('.history-items');
+            const productsEl = item.querySelector('.history-products');
+            const editBtn = item.querySelector('.history-edit-btn');
+            const deleteBtn = item.querySelector('.history-delete-btn');
 
             dateEl.textContent = Utils.formatDate(receipt.created_at);
             timeEl.textContent = Utils.formatTime(receipt.created_at);
+            authorEl.textContent = receipt.added_by ? ` · von ${receipt.added_by}` : '';
             totalEl.textContent = `${Utils.formatMoney(receipt.total)} €`;
 
             const products = receipt.receipt_items || [];
-            itemsEl.innerHTML = products
+            productsEl.innerHTML = products
                 .map(
                     (p) => `
         <div class="flex items-center justify-between text-sm">
@@ -268,6 +438,9 @@ const History = (function () {
                 itemsEl.classList.toggle('hidden');
                 item.classList.toggle('expanded');
             });
+
+            editBtn.addEventListener('click', () => ReceiptActions.enterEditMode(receipt));
+            deleteBtn.addEventListener('click', () => ReceiptActions.deleteReceipt(receipt.id));
 
             DOM.historyList.appendChild(item);
         });
@@ -288,9 +461,9 @@ const History = (function () {
 const Settings = (function () {
     function open() {
         DOM.budgetInput.value = State.monthlyBudget;
+        DOM.settingsNameInput.value = UserIdentity.get();
         DOM.settingsOverlay.classList.remove('opacity-0', 'pointer-events-none');
         DOM.settingsSheet.classList.remove('translate-y-full');
-        setTimeout(() => DOM.budgetInput.focus(), 200);
     }
 
     function close() {
@@ -304,6 +477,8 @@ const Settings = (function () {
             alert('Bitte einen gültigen Betrag eingeben.');
             return;
         }
+
+        UserIdentity.set(DOM.settingsNameInput.value);
 
         DOM.saveBudgetBtn.disabled = true;
         try {
@@ -384,8 +559,12 @@ function registerServiceWorker() {
 // App Init
 // ------------------------------------------------------------
 (async function initApp() {
+    UserIdentity.initOnboarding();
+    UserIdentity.ensureOnboarding();
+
     ProductForm.init();
     ReceiptSubmit.init();
+    ReceiptActions.init();
     Settings.init();
     registerServiceWorker();
 

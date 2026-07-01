@@ -77,6 +77,19 @@
 </head>
 <body class="bg-ink text-bone min-h-screen grain">
 
+<!-- Onboarding: Namenseingabe beim allerersten Start -->
+<div id="onboarding-overlay" class="hidden fixed inset-0 bg-ink z-[60] flex items-center justify-center px-8">
+    <div class="w-full max-w-sm">
+        <div class="w-14 h-14 rounded-2xl bg-amber/15 flex items-center justify-center mb-5 mx-auto">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f5a524" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+        </div>
+        <h1 class="text-xl font-semibold text-center mb-1">Willkommen 👋</h1>
+        <p class="text-sm text-muted text-center mb-6">Wie heißt du? So sehen wir, wer welchen Beleg eingetragen hat.</p>
+        <input id="onboarding-name-input" type="text" placeholder="Dein Name" class="w-full bg-panel border border-hairline rounded-xl px-4 py-3 text-lg text-bone outline-none focus:border-amber/60 mb-4 text-center">
+        <button id="onboarding-save-btn" class="press-scale w-full py-4 rounded-2xl bg-amber text-ink font-bold text-lg">Los geht's</button>
+    </div>
+</div>
+
 <div class="max-w-md mx-auto min-h-screen flex flex-col pb-10">
 
     <!-- Header -->
@@ -120,6 +133,11 @@
         <div class="bg-panel border border-hairline rounded-3xl p-5">
             <h2 class="text-base font-semibold mb-4">Neuer Beleg</h2>
 
+            <div id="editing-banner" class="hidden items-center justify-between bg-amber/10 border border-amber/30 rounded-xl px-4 py-2.5 mb-3">
+                <span class="text-xs text-amber-soft font-medium">✏️ Beleg wird bearbeitet</span>
+                <button id="cancel-edit-btn" class="text-xs text-muted underline shrink-0 ml-3">Abbrechen</button>
+            </div>
+
             <div id="product-rows" class="flex flex-col gap-2 mb-3"></div>
 
             <button id="add-product-btn" class="press-scale w-full py-3 rounded-xl border border-dashed border-hairline text-muted hover:text-amber-soft hover:border-amber/40 text-sm font-medium flex items-center justify-center gap-2 mb-4">
@@ -152,8 +170,12 @@
 <div id="settings-sheet" class="sheet fixed left-0 right-0 bottom-0 translate-y-full z-50 max-w-md mx-auto">
     <div class="bg-panel2 border-t border-hairline rounded-t-3xl p-6 pb-8">
         <div class="w-10 h-1 bg-hairline rounded-full mx-auto mb-5"></div>
-        <h2 class="text-lg font-semibold mb-1">Einstellungen</h2>
-        <p class="text-sm text-muted mb-5">Monatliches Startbudget</p>
+        <h2 class="text-lg font-semibold mb-4">Einstellungen</h2>
+
+        <p class="text-sm text-muted mb-2">Dein Name</p>
+        <input id="settings-name-input" type="text" placeholder="Dein Name" class="w-full bg-panel border border-hairline rounded-xl px-4 py-3 text-base text-bone outline-none focus:border-amber/60 mb-5">
+
+        <p class="text-sm text-muted mb-2">Monatliches Startbudget</p>
         <div class="flex items-center gap-3 mb-6">
             <input id="budget-input" type="number" inputmode="decimal" step="0.01" class="num flex-1 bg-panel border border-hairline rounded-xl px-4 py-3 text-xl font-semibold text-bone outline-none focus:border-amber/60" placeholder="200">
             <span class="text-xl text-muted">€</span>
@@ -184,14 +206,20 @@
         <button class="history-toggle w-full flex items-center justify-between px-4 py-3.5 text-left">
             <div>
                 <p class="history-date text-sm font-medium">—</p>
-                <p class="history-time text-xs text-muted">—</p>
+                <p class="text-xs text-muted"><span class="history-time">—</span><span class="history-author"></span></p>
             </div>
             <div class="flex items-center gap-2">
                 <span class="history-total num text-lg font-bold text-amber-soft">—</span>
                 <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9c8c7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </div>
         </button>
-        <div class="history-items hidden border-t border-hairline px-4 py-3 flex flex-col gap-1.5"></div>
+        <div class="history-items hidden border-t border-hairline px-4 py-3 flex flex-col gap-1.5">
+            <div class="history-products flex flex-col gap-1.5"></div>
+            <div class="flex items-center gap-2 pt-2 mt-1 border-t border-hairline/60">
+                <button class="history-edit-btn flex-1 py-2 rounded-lg text-xs font-semibold text-amber-soft bg-amber/10">Bearbeiten</button>
+                <button class="history-delete-btn flex-1 py-2 rounded-lg text-xs font-semibold text-red-400 bg-red-400/10">Löschen</button>
+            </div>
+        </div>
     </div>
 </template>
 

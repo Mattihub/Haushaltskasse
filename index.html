@@ -138,16 +138,45 @@
                 <button id="cancel-edit-btn" class="text-xs text-muted underline shrink-0 ml-3">Abbrechen</button>
             </div>
 
-            <div id="product-rows" class="flex flex-col gap-2 mb-3"></div>
+            <input id="store-input" type="text" placeholder="Wo eingekauft? (optional)" class="w-full bg-panel2 border border-hairline rounded-xl px-4 py-2.5 text-sm text-bone outline-none focus:border-amber/60 mb-3">
 
-            <button id="add-product-btn" class="press-scale w-full py-3 rounded-xl border border-dashed border-hairline text-muted hover:text-amber-soft hover:border-amber/40 text-sm font-medium flex items-center justify-center gap-2 mb-4">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                Produkt hinzufügen
-            </button>
+            <div class="mb-3">
+                <label class="text-xs text-muted mb-1.5 block px-1">Betrag</label>
+                <div class="flex items-center gap-2 bg-panel2 border border-hairline rounded-xl px-4 py-3 focus-within:border-amber/60">
+                    <input id="amount-input" type="number" inputmode="decimal" step="0.01" placeholder="0,00" class="num flex-1 bg-transparent text-2xl font-bold text-bone outline-none">
+                    <span class="text-lg text-muted">€</span>
+                </div>
+            </div>
 
-            <div class="flex items-center justify-between px-1 mb-4">
-                <span class="text-sm text-muted">Summe</span>
-                <span class="num text-2xl font-bold text-amber-soft" id="running-total">0,00 €</span>
+            <div class="mb-4">
+                <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden">
+                <div id="photo-preview-wrap" class="hidden relative mb-2">
+                    <img id="photo-preview" class="w-full rounded-xl border border-hairline object-cover max-h-48" alt="Beleg-Foto">
+                    <button id="remove-photo-btn" type="button" aria-label="Foto entfernen" class="press-scale absolute top-2 right-2 w-8 h-8 rounded-full bg-ink/80 border border-hairline flex items-center justify-center text-bone">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <button id="photo-btn" type="button" class="press-scale w-full py-3 rounded-xl border border-dashed border-hairline text-muted hover:text-amber-soft hover:border-amber/40 text-sm font-medium flex items-center justify-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                    <span id="photo-btn-label">Foto vom Bon hinzufügen</span>
+                </button>
+            </div>
+
+            <div id="product-section" class="hidden">
+                <div class="flex items-center justify-between px-1 mb-2">
+                    <span class="text-xs text-muted">Einzelne Produkte (optional)</span>
+                </div>
+                <div id="product-rows" class="flex flex-col gap-2 mb-3"></div>
+
+                <button id="add-product-btn" class="press-scale w-full py-3 rounded-xl border border-dashed border-hairline text-muted hover:text-amber-soft hover:border-amber/40 text-sm font-medium flex items-center justify-center gap-2 mb-4">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    Produkt hinzufügen
+                </button>
+
+                <div class="flex items-center justify-between px-1 mb-4">
+                    <span class="text-sm text-muted">Summe Produkte</span>
+                    <span class="num text-xl font-bold text-amber-soft" id="running-total">0,00 €</span>
+                </div>
             </div>
 
             <button id="submit-receipt-btn" class="press-scale w-full py-4 rounded-2xl bg-amber text-ink font-bold text-lg disabled:opacity-40 disabled:pointer-events-none">
@@ -205,6 +234,7 @@
     <div class="history-item bg-panel border border-hairline rounded-2xl overflow-hidden">
         <button class="history-toggle w-full flex items-center justify-between px-4 py-3.5 text-left">
             <div>
+                <p class="history-store text-sm font-semibold hidden">—</p>
                 <p class="history-date text-sm font-medium">—</p>
                 <p class="text-xs text-muted"><span class="history-time">—</span><span class="history-author"></span></p>
             </div>
@@ -214,6 +244,8 @@
             </div>
         </button>
         <div class="history-items hidden border-t border-hairline px-4 py-3 flex flex-col gap-1.5">
+            <img class="history-photo hidden rounded-lg border border-hairline mb-1 max-h-48 w-full object-cover" alt="Beleg-Foto">
+            <p class="history-no-details hidden text-xs text-muted/60 italic">Keine Einzelposten erfasst.</p>
             <div class="history-products flex flex-col gap-1.5"></div>
             <div class="flex items-center gap-2 pt-2 mt-1 border-t border-hairline/60">
                 <button class="history-edit-btn flex-1 py-2 rounded-lg text-xs font-semibold text-amber-soft bg-amber/10">Bearbeiten</button>

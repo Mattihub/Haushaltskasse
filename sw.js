@@ -1,6 +1,6 @@
 // Cache-Version hochzählen, wenn sich index.html/app.js ändern,
 // damit Nutzer die neue Version bekommen statt der alten aus dem Cache.
-const CACHE_NAME = 'haushaltskasse-v2';
+const CACHE_NAME = 'haushaltskasse-v3';
 
 const APP_SHELL = [
     './',

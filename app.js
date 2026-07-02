@@ -337,7 +337,13 @@ const ProductForm = (function () {
     function recalcTotal() {
         const total = getValidItems().reduce((sum, item) => sum + item.price, 0);
         DOM.runningTotal.textContent = `${Utils.formatMoney(total)} €`;
-        DOM.submitReceiptBtn.disabled = total <= 0;
+        // Solange Produkte erfasst sind, ist die Summe der Produkte die
+        // Quelle der Wahrheit für den Betrag. Werden alle Zeilen wieder
+        // gelöscht, bleibt der zuletzt gültige Betrag stehen und ist
+        // manuell änderbar.
+        if (total > 0) {
+            DOM.amountInput.value = total.toFixed(2);
+        }
         return total;
     }
 
@@ -361,9 +367,15 @@ const ProductForm = (function () {
 const ReceiptSubmit = (function () {
     async function submit() {
         const items = ProductForm.getValidItems();
-        if (items.length === 0) return;
+        const itemsTotal = items.reduce((sum, item) => sum + item.price, 0);
+        const manualTotal = Utils.parsePrice(DOM.amountInput.value);
+        const total = items.length > 0 ? itemsTotal : manualTotal;
 
-        const total = items.reduce((sum, item) => sum + item.price, 0);
+        if (total <= 0) {
+            alert('Bitte einen Betrag eingeben oder Produkte hinzufügen.');
+            return;
+        }
+
         const editingId = State.editingReceiptId;
         const storeName = DOM.storeInput.value.trim() || null;
 
@@ -371,12 +383,14 @@ const ReceiptSubmit = (function () {
         DOM.submitReceiptBtn.textContent = 'Speichern…';
 
         try {
+            const photoUrl = await PhotoUpload.uploadIfNeeded();
+
             if (editingId) {
-                // Bestehenden Beleg aktualisieren: Summe updaten, alte
-                // Produktzeilen ersetzen.
+                // Bestehenden Beleg aktualisieren: Summe/Laden/Foto updaten,
+                // alte Produktzeilen ersetzen.
                 const { error: updateError } = await sb
                     .from('receipts')
-                    .update({ total, store_name: storeName })
+                    .update({ total, store_name: storeName, photo_url: photoUrl })
                     .eq('id', editingId);
                 if (updateError) throw updateError;
 
@@ -386,51 +400,62 @@ const ReceiptSubmit = (function () {
                     .eq('receipt_id', editingId);
                 if (deleteItemsError) throw deleteItemsError;
 
-                const itemRows = items.map((item) => ({
-                    receipt_id: editingId,
-                    name: item.name,
-                    price: item.price
-                }));
-                const { error: itemsError } = await sb.from('receipt_items').insert(itemRows);
-                if (itemsError) throw itemsError;
+                if (items.length > 0) {
+                    const itemRows = items.map((item) => ({
+                        receipt_id: editingId,
+                        name: item.name,
+                        price: item.price
+                    }));
+                    const { error: itemsError } = await sb.from('receipt_items').insert(itemRows);
+                    if (itemsError) throw itemsError;
+                }
 
                 ReceiptActions.exitEditMode();
             } else {
                 const { data: receipt, error: receiptError } = await sb
                     .from('receipts')
-                    .insert({ total, added_by: UserIdentity.get() || null, store_name: storeName })
+                    .insert({ total, added_by: UserIdentity.get() || null, store_name: storeName, photo_url: photoUrl })
                     .select()
                     .single();
 
                 if (receiptError) throw receiptError;
 
-                const itemRows = items.map((item) => ({
-                    receipt_id: receipt.id,
-                    name: item.name,
-                    price: item.price
-                }));
+                if (items.length > 0) {
+                    const itemRows = items.map((item) => ({
+                        receipt_id: receipt.id,
+                        name: item.name,
+                        price: item.price
+                    }));
 
-                const { error: itemsError } = await sb.from('receipt_items').insert(itemRows);
-                if (itemsError) throw itemsError;
+                    const { error: itemsError } = await sb.from('receipt_items').insert(itemRows);
+                    if (itemsError) throw itemsError;
+                }
             }
 
-            DOM.storeInput.value = '';
-            ProductForm.reset();
+            resetForm();
             await DataSync.reload();
         } catch (err) {
             console.error('Fehler beim Speichern des Belegs:', err);
             alert('Beleg konnte nicht gespeichert werden. Bitte Internetverbindung prüfen und erneut versuchen.');
         } finally {
+            DOM.submitReceiptBtn.disabled = false;
             DOM.submitReceiptBtn.textContent = State.editingReceiptId ? 'Änderungen speichern' : 'Beleg abrechnen';
-            ProductForm.recalcTotal();
         }
+    }
+
+    function resetForm() {
+        DOM.storeInput.value = '';
+        DOM.amountInput.value = '';
+        DOM.productSection.classList.add('hidden');
+        ProductForm.reset();
+        PhotoUpload.reset();
     }
 
     function init() {
         DOM.submitReceiptBtn.addEventListener('click', submit);
     }
 
-    return { init };
+    return { init, resetForm };
 })();
 
 // ------------------------------------------------------------
@@ -440,8 +465,11 @@ const ReceiptActions = (function () {
     function enterEditMode(receipt) {
         State.editingReceiptId = receipt.id;
         const items = (receipt.receipt_items || []).map((i) => ({ name: i.name, price: i.price }));
-        ProductForm.loadItems(items);
         DOM.storeInput.value = receipt.store_name || '';
+        DOM.amountInput.value = receipt.total;
+        ProductForm.loadItems(items);
+        PhotoUpload.loadExisting(receipt.photo_url);
+        DOM.productSection.classList.remove('hidden');
         DOM.editingBanner.classList.remove('hidden');
         DOM.editingBanner.classList.add('flex');
         DOM.submitReceiptBtn.textContent = 'Änderungen speichern';
@@ -452,6 +480,7 @@ const ReceiptActions = (function () {
         State.editingReceiptId = null;
         DOM.editingBanner.classList.add('hidden');
         DOM.editingBanner.classList.remove('flex');
+        DOM.productSection.classList.add('hidden');
         DOM.submitReceiptBtn.textContent = 'Beleg abrechnen';
     }
 
@@ -465,7 +494,7 @@ const ReceiptActions = (function () {
 
             if (State.editingReceiptId === id) {
                 exitEditMode();
-                ProductForm.reset();
+                ReceiptSubmit.resetForm();
             }
             await DataSync.reload();
         } catch (err) {
@@ -477,8 +506,7 @@ const ReceiptActions = (function () {
     function init() {
         DOM.cancelEditBtn.addEventListener('click', () => {
             exitEditMode();
-            DOM.storeInput.value = '';
-            ProductForm.reset();
+            ReceiptSubmit.resetForm();
         });
     }
 

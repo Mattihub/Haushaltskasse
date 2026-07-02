@@ -436,7 +436,7 @@ const ReceiptSubmit = (function () {
             await DataSync.reload();
         } catch (err) {
             console.error('Fehler beim Speichern des Belegs:', err);
-            alert('Beleg konnte nicht gespeichert werden. Bitte Internetverbindung prüfen und erneut versuchen.');
+            alert('Beleg konnte nicht gespeichert werden:\n' + (err?.message || String(err)));
         } finally {
             DOM.submitReceiptBtn.disabled = false;
             DOM.submitReceiptBtn.textContent = State.editingReceiptId ? 'Änderungen speichern' : 'Beleg abrechnen';

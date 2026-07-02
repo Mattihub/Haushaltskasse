@@ -116,9 +116,19 @@ const DOM = {
     dailyBudget: document.getElementById('daily-budget'),
 
     productRows: document.getElementById('product-rows'),
+    productSection: document.getElementById('product-section'),
+    storeInput: document.getElementById('store-input'),
+    amountInput: document.getElementById('amount-input'),
     addProductBtn: document.getElementById('add-product-btn'),
     runningTotal: document.getElementById('running-total'),
     submitReceiptBtn: document.getElementById('submit-receipt-btn'),
+
+    photoInput: document.getElementById('photo-input'),
+    photoPreviewWrap: document.getElementById('photo-preview-wrap'),
+    photoPreview: document.getElementById('photo-preview'),
+    removePhotoBtn: document.getElementById('remove-photo-btn'),
+    photoBtn: document.getElementById('photo-btn'),
+    photoBtnLabel: document.getElementById('photo-btn-label'),
 
     historyList: document.getElementById('history-list'),
     historyEmpty: document.getElementById('history-empty'),
@@ -141,6 +151,85 @@ const DOM = {
     productRowTemplate: document.getElementById('product-row-template'),
     historyItemTemplate: document.getElementById('history-item-template')
 };
+
+// ------------------------------------------------------------
+// PhotoUpload – Beleg-Foto auswählen, anzeigen, zu Supabase
+// Storage hochladen
+// ------------------------------------------------------------
+const PhotoUpload = (function () {
+    const BUCKET = 'receipt-photos';
+
+    let selectedFile = null; // neu ausgewähltes, noch nicht hochgeladenes Foto
+    let existingUrl = null; // bereits gespeicherte URL (beim Bearbeiten geladen)
+
+    function showPreview(src) {
+        DOM.photoPreview.src = src;
+        DOM.photoPreviewWrap.classList.remove('hidden');
+        DOM.photoBtnLabel.textContent = 'Foto ersetzen';
+    }
+
+    function hidePreview() {
+        DOM.photoPreviewWrap.classList.add('hidden');
+        DOM.photoPreview.src = '';
+        DOM.photoBtnLabel.textContent = 'Foto vom Bon hinzufügen';
+    }
+
+    function onFileSelected(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        selectedFile = file;
+        existingUrl = null;
+
+        const reader = new FileReader();
+        reader.onload = (ev) => showPreview(ev.target.result);
+        reader.readAsDataURL(file);
+    }
+
+    function remove() {
+        selectedFile = null;
+        existingUrl = null;
+        DOM.photoInput.value = '';
+        hidePreview();
+    }
+
+    function reset() {
+        remove();
+    }
+
+    function loadExisting(url) {
+        reset();
+        if (url) {
+            existingUrl = url;
+            showPreview(url);
+        }
+    }
+
+    // Lädt ein neu ausgewähltes Foto hoch (falls vorhanden) und gibt
+    // die zu speichernde URL zurück. Wurde nichts geändert, bleibt die
+    // bestehende URL erhalten. Wurde das Foto entfernt, wird null
+    // zurückgegeben.
+    async function uploadIfNeeded() {
+        if (!selectedFile) return existingUrl;
+
+        const ext = (selectedFile.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `${crypto.randomUUID()}.${ext}`;
+
+        const { error } = await sb.storage.from(BUCKET).upload(path, selectedFile);
+        if (error) throw error;
+
+        const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
+        return data.publicUrl;
+    }
+
+    function init() {
+        DOM.photoBtn.addEventListener('click', () => DOM.photoInput.click());
+        DOM.photoInput.addEventListener('change', onFileSelected);
+        DOM.removePhotoBtn.addEventListener('click', remove);
+    }
+
+    return { init, reset, loadExisting, uploadIfNeeded };
+})();
 
 // ------------------------------------------------------------
 // Budget – Anzeige oben
@@ -276,6 +365,7 @@ const ReceiptSubmit = (function () {
 
         const total = items.reduce((sum, item) => sum + item.price, 0);
         const editingId = State.editingReceiptId;
+        const storeName = DOM.storeInput.value.trim() || null;
 
         DOM.submitReceiptBtn.disabled = true;
         DOM.submitReceiptBtn.textContent = 'Speichern…';
@@ -286,7 +376,7 @@ const ReceiptSubmit = (function () {
                 // Produktzeilen ersetzen.
                 const { error: updateError } = await sb
                     .from('receipts')
-                    .update({ total })
+                    .update({ total, store_name: storeName })
                     .eq('id', editingId);
                 if (updateError) throw updateError;
 
@@ -308,7 +398,7 @@ const ReceiptSubmit = (function () {
             } else {
                 const { data: receipt, error: receiptError } = await sb
                     .from('receipts')
-                    .insert({ total, added_by: UserIdentity.get() || null })
+                    .insert({ total, added_by: UserIdentity.get() || null, store_name: storeName })
                     .select()
                     .single();
 
@@ -324,6 +414,7 @@ const ReceiptSubmit = (function () {
                 if (itemsError) throw itemsError;
             }
 
+            DOM.storeInput.value = '';
             ProductForm.reset();
             await DataSync.reload();
         } catch (err) {
@@ -350,6 +441,7 @@ const ReceiptActions = (function () {
         State.editingReceiptId = receipt.id;
         const items = (receipt.receipt_items || []).map((i) => ({ name: i.name, price: i.price }));
         ProductForm.loadItems(items);
+        DOM.storeInput.value = receipt.store_name || '';
         DOM.editingBanner.classList.remove('hidden');
         DOM.editingBanner.classList.add('flex');
         DOM.submitReceiptBtn.textContent = 'Änderungen speichern';
@@ -385,6 +477,7 @@ const ReceiptActions = (function () {
     function init() {
         DOM.cancelEditBtn.addEventListener('click', () => {
             exitEditMode();
+            DOM.storeInput.value = '';
             ProductForm.reset();
         });
     }
@@ -409,6 +502,7 @@ const History = (function () {
             const fragment = DOM.historyItemTemplate.content.cloneNode(true);
             const item = fragment.querySelector('.history-item');
             const toggle = item.querySelector('.history-toggle');
+            const storeEl = item.querySelector('.history-store');
             const dateEl = item.querySelector('.history-date');
             const timeEl = item.querySelector('.history-time');
             const authorEl = item.querySelector('.history-author');
@@ -418,6 +512,10 @@ const History = (function () {
             const editBtn = item.querySelector('.history-edit-btn');
             const deleteBtn = item.querySelector('.history-delete-btn');
 
+            if (receipt.store_name) {
+                storeEl.textContent = receipt.store_name;
+                storeEl.classList.remove('hidden');
+            }
             dateEl.textContent = Utils.formatDate(receipt.created_at);
             timeEl.textContent = Utils.formatTime(receipt.created_at);
             authorEl.textContent = receipt.added_by ? ` · von ${receipt.added_by}` : '';
@@ -573,6 +671,7 @@ function registerServiceWorker() {
     UserIdentity.ensureOnboarding();
 
     ProductForm.init();
+    PhotoUpload.init();
     ReceiptSubmit.init();
     ReceiptActions.init();
     Settings.init();

@@ -536,6 +536,8 @@ const History = (function () {
             const authorEl = item.querySelector('.history-author');
             const totalEl = item.querySelector('.history-total');
             const itemsEl = item.querySelector('.history-items');
+            const photoEl = item.querySelector('.history-photo');
+            const noDetailsEl = item.querySelector('.history-no-details');
             const productsEl = item.querySelector('.history-products');
             const editBtn = item.querySelector('.history-edit-btn');
             const deleteBtn = item.querySelector('.history-delete-btn');
@@ -549,7 +551,17 @@ const History = (function () {
             authorEl.textContent = receipt.added_by ? ` · von ${receipt.added_by}` : '';
             totalEl.textContent = `${Utils.formatMoney(receipt.total)} €`;
 
+            if (receipt.photo_url) {
+                photoEl.src = receipt.photo_url;
+                photoEl.classList.remove('hidden');
+                photoEl.classList.add('cursor-zoom-in');
+                photoEl.addEventListener('click', () => window.open(receipt.photo_url, '_blank'));
+            }
+
             const products = receipt.receipt_items || [];
+            if (products.length === 0) {
+                noDetailsEl.classList.remove('hidden');
+            }
             productsEl.innerHTML = products
                 .map(
                     (p) => `
